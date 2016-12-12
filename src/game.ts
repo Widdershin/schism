@@ -42,10 +42,13 @@ function applyAction (state: GameState, action: Action): GameState {
 
       const destinationDistance = subtract(player.destination, player.position);
 
-      const speed = 3;
+      const speed = 5;
 
-      if (pythag(destinationDistance) > 1) {
+      if (pythag(destinationDistance) > speed) {
         player.position = add(player.position, multiply(normalize(destinationDistance), delta * speed));
+      } else {
+        player.position = player.destination;
+        player.destination = null;
       }
     });
 

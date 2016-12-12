@@ -34,10 +34,18 @@ function makeWebSocketDriver (socketServer) {
       next (event) {
         if (event.type === 'BROADCAST') {
           Object.values(connections).forEach(connection => {
-            connection.send(JSON.stringify(event.data));
+            connection.send(JSON.stringify(event.data), (err) => {
+              if (err) {
+                console.error(err);
+              }
+            });
           });
         } else if (event.type === 'SEND') {
-          connections[event.id].send(JSON.stringify(event.data));
+          connections[event.id].send(JSON.stringify(event.data), (err) => {
+            if (err) {
+              console.error(err);
+            }
+          });
         } else {
           throw new Error(`Unrecognized event ${event}`);
         }

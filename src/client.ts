@@ -14,19 +14,22 @@ function mousePosition (event) {
 }
 
 function renderPlayer (player) {
+  const size = 64;
   return (
     h('g', [
-      h('circle', {
+      h('image', {
         attrs: {
-          cx: player.position.x,
-          cy: player.position.y,
-          r: 20
+          href: '/character.png',
+          x: player.position.x - size / 2,
+          y: player.position.y - size / 2,
+          width: size,
+          height: size
         }
       }),
       h('text', {
         attrs: {
           x: player.position.x,
-          y: player.position.y + 35,
+          y: player.position.y + size,
           'text-anchor': 'middle'
         }
       }, player.name.slice(0, 5)),
@@ -36,7 +39,14 @@ function renderPlayer (player) {
 
 function view (state) {
   return (
-    h('svg', {attrs: {width: '100vw', height: '100vh'}}, [
+    h('svg', {
+      attrs: {
+        width: '100vw',
+        height: '100vh',
+        xmlns: "http://www.w3.org/2000/svg",
+        'xmlns:xlink': 'http://www.w3.org/1999/xlink'
+      }
+    }, [
       ...Object.values(state.players).map(renderPlayer)
     ])
   );
@@ -76,7 +86,7 @@ function Client (sources) {
   });
 
   return {
-    DOM: state$.map(view),
+    DOM: state$.map(state => sources.Animation.mapTo(view(state))).flatten(),
     Socket: move$
   }
 }
