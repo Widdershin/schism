@@ -86,7 +86,7 @@ function Client (sources) {
   });
 
   return {
-    DOM: state$.map(state => sources.Animation.mapTo(view(state))).flatten(),
+    DOM: state$.map(view),
     Socket: move$
   }
 }
