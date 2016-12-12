@@ -4,7 +4,7 @@ import {run} from '@cycle/xstream-run';
 
 import xs, {Stream} from 'xstream';
 
-import {Game, Action} from './game';
+import {Game, Action, GameState, PlayerState} from './game';
 
 function mousePosition (event) {
   return {
@@ -13,7 +13,7 @@ function mousePosition (event) {
   }
 }
 
-function renderPlayer (player) {
+function renderPlayer (player: PlayerState) {
   const size = 64;
   return (
     h('g', [
@@ -26,6 +26,7 @@ function renderPlayer (player) {
           height: size
         }
       }),
+
       h('text', {
         attrs: {
           x: player.position.x,
@@ -33,11 +34,19 @@ function renderPlayer (player) {
           'text-anchor': 'middle'
         }
       }, player.name.slice(0, 5)),
+
+      h('text', {
+        attrs: {
+          x: player.position.x,
+          y: player.position.y - size,
+          'text-anchor': 'middle'
+        }
+      }, player.newMessage)
     ])
   )
 }
 
-function view (state) {
+function view (state: GameState) {
   return (
     h('svg', {
       attrs: {
@@ -71,9 +80,15 @@ function Client (sources) {
     .map(mousePosition)
     .map(destination => ({type: 'MOVE', data: destination}));
 
+  const chat$ = sources.DOM
+    .select('document')
+    .events('keydown')
+    .map(event => ({type: 'CHAT', data: event.key}));
+
   const gameAction$ = xs.merge(
     move$,
-    stateOverride$
+    stateOverride$,
+    chat$
   );
 
   const gameActionWithId$ = id$
@@ -85,9 +100,14 @@ function Client (sources) {
     action$: gameActionWithId$ as Stream<Action>
   });
 
+  const socket$ = xs.merge(
+    move$,
+    chat$
+  );
+
   return {
     DOM: state$.map(view),
-    Socket: move$
+    Socket: socket$
   }
 }
 

@@ -7,8 +7,8 @@ interface GameSources {
   action$: Stream<Action>
 }
 
-export interface Action {
-  type: 'CONNECT' | 'DISCONNECT' | 'MOVE' | 'UPDATE' | 'OVERRIDE',
+interface Action {
+  type: 'CONNECT' | 'DISCONNECT' | 'MOVE' | 'UPDATE' | 'OVERRIDE' | 'CHAT',
   id?: string,
 
   data?: any
@@ -22,7 +22,15 @@ interface PlayerState {
   id: string,
   name: string,
   position: Vector,
-  destination: null | Vector
+  destination: null | Vector,
+  chat: Array<string>,
+  chatting: Boolean,
+  newMessage: string
+}
+
+interface ChatMessage {
+  text: string,
+  time: Date
 }
 
 function applyAction (state: GameState, action: Action): GameState {
@@ -69,7 +77,10 @@ function applyAction (state: GameState, action: Action): GameState {
             x: 100 + 600 * Math.random(),
             y: 100
           },
-          destination: null
+          destination: null,
+          chat: [],
+          chatting: false,
+          newMessage: ''
         }
       }
     }
@@ -91,6 +102,80 @@ function applyAction (state: GameState, action: Action): GameState {
         [action.id]: {
           ...state.players[action.id],
           destination: action.data
+        }
+      }
+    }
+  }
+
+  if (action.type === 'CHAT') {
+    const player = state.players[action.id];
+
+    if (!player.chatting && action.data === 'Enter') {
+      return {
+        ...state,
+
+        players: {
+          ...state.players,
+
+          [player.id]: {
+            ...player,
+
+            chatting: true
+          }
+        }
+      }
+    }
+
+    if (player.chatting && action.data === 'Enter') {
+      return {
+        ...state,
+
+        players: {
+          ...state.players,
+
+          [player.id]: {
+            ...player,
+
+            chat: player.chat.concat(player.newMessage),
+            chatting: false,
+            newMessage: ''
+          }
+        }
+      }
+    }
+
+    if (!player.chatting) {
+      return state;
+    }
+
+    if (action.data.length > 1) {
+      if (action.data === 'Backspace') {
+        return {
+          ...state,
+
+          players: {
+            ...state.players,
+
+            [player.id]: {
+              ...player,
+              newMessage: player.newMessage.slice(0, -1)
+            }
+          }
+        }
+      }
+
+      return state;
+    }
+
+    return {
+      ...state,
+
+      players: {
+        ...state.players,
+
+        [player.id]: {
+          ...player,
+          newMessage: player.newMessage + action.data
         }
       }
     }
@@ -119,5 +204,8 @@ function Game (sources: GameSources) {
 }
 
 export {
-  Game
+  Game,
+  PlayerState,
+  GameState,
+  Action
 }
