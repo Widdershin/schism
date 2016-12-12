@@ -1,39 +1,83 @@
 import {makeAnimationDriver} from 'cycle-animation-driver';
-import {div, pre, input, button, makeDOMDriver} from '@cycle/dom';
+import {h, div, pre, input, button, makeDOMDriver} from '@cycle/dom';
 import {run} from '@cycle/xstream-run';
 
-import xs from 'xstream';
+import xs, {Stream} from 'xstream';
+
+import {Game, Action} from './game';
+
+function mousePosition (event) {
+  return {
+    x: event.clientX,
+    y: event.clientY
+  }
+}
+
+function renderPlayer (player) {
+  return (
+    h('g', [
+      h('circle', {
+        attrs: {
+          cx: player.position.x,
+          cy: player.position.y,
+          r: 20
+        }
+      }),
+      h('text', {
+        attrs: {
+          x: player.position.x,
+          y: player.position.y + 35,
+          'text-anchor': 'middle'
+        }
+      }, player.name.slice(0, 5)),
+    ])
+  )
+}
 
 function view (state) {
   return (
-    div('.chat-app', [
-      input('.new-message'),
-      button('.send', 'Send'),
-
-      div('.messages', state.messages.map(message => div('.message', message)))
+    h('svg', {attrs: {width: '100vw', height: '100vh'}}, [
+      ...Object.values(state.players).map(renderPlayer)
     ])
   );
 }
 
 function Client (sources) {
-  const state$ = sources.Socket.messages.startWith({messages: []});
+  const stateUpdate$ = sources.Socket.messages
+    .filter(message => message.type === 'UPDATE_STATE')
+    .map(message => message.data);
 
-  const newMessage$ = sources.DOM
-    .select('.new-message')
-    .events('input')
-    .map(ev => ev.target.value);
+  const stateOverride$ = stateUpdate$
+    .map(serverState => ({type: 'OVERRIDE', data: serverState}));
 
-  const send$ = sources.DOM
-    .select('.send')
-    .events('click');
+  const id$ = sources.Socket.messages
+    .filter(message => message.type === 'SET_ID')
+    .map(message => message.data)
+    .remember();
 
-  const message$ = newMessage$
-    .map(message => send$.mapTo(message))
+  const move$ = sources.DOM
+    .select('svg')
+    .events('click')
+    .map(mousePosition)
+    .map(destination => ({type: 'MOVE', data: destination}));
+
+  const gameAction$ = xs.merge(
+    move$,
+    stateOverride$
+  );
+
+  const gameActionWithId$ = id$
+    .map(id => gameAction$.map(action => ({...action, id})))
     .flatten();
+
+  const state$ = Game({
+    Animation: sources.Animation,
+    action$: gameActionWithId$ as Stream<Action>
+  });
 
   return {
     DOM: state$.map(view),
-    Socket: message$
+    Socket: move$
   }
 }
 
@@ -41,7 +85,6 @@ function makeWebSocketDriver (ws) {
   return function socketDriver (sink$, streamAdapter) {
     const {observer, stream} = streamAdapter.makeSubject();
     const startup = xs.create();
-
 
     ws.onmessage = (data, flags) => {
       observer.next(JSON.parse(data.data));
@@ -51,7 +94,7 @@ function makeWebSocketDriver (ws) {
       sink$.addListener({
         next (message) {
           console.log('outgoing message', message);
-          ws.send(message);
+          ws.send(JSON.stringify(message));
         }
       });
 
@@ -67,7 +110,7 @@ function makeWebSocketDriver (ws) {
 
 const drivers = {
   DOM: makeDOMDriver('.app'),
-  Time: makeAnimationDriver(),
+  Animation: makeAnimationDriver(),
   Socket: makeWebSocketDriver(new WebSocket(`ws://127.0.0.1:8000/websocket`))
 };
 

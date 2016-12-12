@@ -1,10 +1,15 @@
 import * as cors from 'cors';
 import * as express from 'express';
 import * as http from 'http';
+import * as uuid from 'node-uuid';
 import * as path from 'path';
 import * as ws from 'ws';
 import {run} from '@cycle/xstream-run';
-import xs from 'xstream';
+import {makeAnimationDriver} from 'cycle-animation-driver';
+import xs, {Stream} from 'xstream';
+import throttle from 'xstream/extra/throttle';
+
+import {Game, Action} from './game';
 
 const app = express();
 app.use(cors());
@@ -23,13 +28,12 @@ function makeWebSocketDriver (socketServer) {
     let connections = [];
     const {observer, stream} = streamAdapter.makeSubject();
     const newConnection$ = xs.create();
+    const disconnection$ = xs.create();
 
     sink$.addListener({
       next (event) {
         if (event.type === 'BROADCAST') {
-          console.log(`broadcasting to all connections`, connections.length);
-          console.log(event.data);
-          connections.forEach(connection => {
+          Object.values(connections).forEach(connection => {
             connection.send(JSON.stringify(event.data));
           });
         } else if (event.type === 'SEND') {
@@ -47,42 +51,33 @@ function makeWebSocketDriver (socketServer) {
     socketServer.on('connection', (ws) => {
       console.log('Connected!')
       // TODO actually do ids well
-      const id = connections.length;
+      const id = uuid.v4();
       console.log(`id: ${id}`);
-      connections.push(ws);
+      connections[id] = ws;
       newConnection$.shamefullySendNext(id);
 
-      ws.on('message', (message) => {
-        console.log(`received message from ${id}: ${message}`);
-        observer.next({message, id});
+      ws.on('message', (data) => {
+        console.log(`received message from ${id}: ${data}`);
+        observer.next({data: JSON.parse(data), id});
       });
 
       ws.on('close', () => {
-        connections = connections.filter(other => ws !== other);
+        delete connections[id];
+        disconnection$.shamefullySendNext(id);
       });
     });
 
     return {
       messages: stream,
-      connections: newConnection$
+      connections: newConnection$,
+      disconnections: disconnection$
     };
   }
 }
 
 const drivers = {
+  Animation: makeAnimationDriver(),
   Socket: makeWebSocketDriver(webSocketServer)
-}
-
-interface State {
-  messages: Array<string>
-}
-
-function reduceMessage (state: State, event): State {
-  return {
-    ...state,
-
-    messages: state.messages.concat(event.message)
-  }
 }
 
 function send (id, data) {
@@ -100,25 +95,52 @@ function broadcast (data) {
   }
 }
 
+// game
+// takes in actions with player id
+// takes in animation stream
+//
+// fold over all information to create game state
+//
+
 function Server (sources) {
-  const initialState = {
-    messages: []
-  };
+  const playerAction$ = sources.Socket.messages.debug('message')
+    .map(message => ({id: message.id, data: message.data.data, type: message.data.type}));
 
-  const state$ = sources.Socket.messages
-    .fold(reduceMessage, initialState).debug('state');
+  const playerConnection$ = sources.Socket.connections
+    .map(id => ({id, type: 'CONNECT'}));
 
-  const stateUpdate$ = state$.map(broadcast);
+  const playerDisconnection$ = sources.Socket.disconnections
+    .map(id => ({id, type: 'DISCONNECT'}));
+
+  const gameAction$ = xs.merge(
+    playerAction$,
+    playerConnection$,
+    playerDisconnection$
+  );
+
+  const state$ = Game({
+    Animation: sources.Animation,
+    action$: gameAction$ as Stream<Action>
+  });
+
+  const stateForClients$ = state$
+    .map(state => ({type: 'UPDATE_STATE', data: state}));
+
+  const stateUpdate$ = stateForClients$.map(broadcast);
 
   const newConnection$ = sources.Socket.connections;
 
-  const newClientState$ = state$
+  const newClientState$ = stateForClients$
     .map(state => newConnection$.map(id => send(id, state)))
     .flatten();
 
+  const setClientId$ = newConnection$
+    .map(id => send(id, {type: 'SET_ID', data: id}));
+
   const socket$ = xs.merge(
     stateUpdate$,
-    newClientState$
+    newClientState$,
+    setClientId$
   );
 
   return {
@@ -126,6 +148,5 @@ function Server (sources) {
   }
 }
 
-run(Server, drivers);
-
 server.listen(8000, () => console.log(`Listening on localhost:8000`));
+run(Server, drivers);
