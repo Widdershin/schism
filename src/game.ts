@@ -16,7 +16,8 @@ interface Action {
 }
 
 interface GameState {
-  players: { [id: string]: PlayerState }
+  players: { [id: string]: PlayerState },
+  enemies: Array<EnemyState>
 }
 
 interface PlayerState {
@@ -26,7 +27,26 @@ interface PlayerState {
   destination: null | Vector,
   chat: Array<ChatMessage>,
   chatting: Boolean,
-  newMessage: string
+  newMessage: string,
+
+  health: number,
+  maxHealth: number
+}
+
+interface EnemyState {
+  id: string,
+  name: string,
+  position: Vector,
+  target: null | string,
+  destination: null | Vector,
+  health: number,
+  maxHealth: number,
+  mode: 'MOVING' | 'ATTACKING' | 'WAITING',
+  attackLength: number,
+  attackProgress: number,
+  attackTimeoutLength: number,
+  attackTimeoutProgress: number,
+  damage: number
 }
 
 interface ChatMessage {
@@ -62,6 +82,81 @@ function applyAction (state: GameState, action: Action): GameState {
       }
     });
 
+    const TARGET_DISTANCE = 400;
+    const ATTACK_RANGE = 80;
+
+    state.enemies = state.enemies.map(enemy => {
+      if (enemy.attackTimeoutProgress < enemy.attackTimeoutLength) {
+        enemy.attackTimeoutProgress += delta;
+      }
+
+      if (!enemy.target) {
+        const nearbyPlayers = Object.values(state.players).filter(player => pythag(subtract(player.position, enemy.position)) < TARGET_DISTANCE);
+
+        if (nearbyPlayers.length > 0) {
+          enemy.target = nearbyPlayers[0].id;
+          enemy.mode = 'MOVING';
+        }
+      }
+
+      let targetPlayer;
+      if (enemy.target) {
+        targetPlayer = state.players[enemy.target];
+
+        if (targetPlayer) {
+          enemy.destination = targetPlayer.position;
+        } else {
+          enemy.target = null;
+          enemy.destination = null;
+        }
+      }
+
+      if (enemy.mode === 'ATTACKING' && !targetPlayer) {
+        enemy.mode = 'WAITING';
+      }
+
+      if (enemy.mode === 'ATTACKING') {
+        enemy.attackProgress += delta;
+
+        if (enemy.attackProgress > enemy.attackLength) {
+          const distanceToTarget = pythag(subtract(targetPlayer.position, enemy.position));
+
+          if (distanceToTarget <= ATTACK_RANGE) {
+            targetPlayer.health -= enemy.damage;
+          }
+
+          enemy.mode = 'WAITING';
+          enemy.attackTimeoutProgress = 0;
+          enemy.attackProgress = 0;
+        }
+
+        return enemy;
+      }
+
+      if (!enemy.destination) {
+        enemy.destination = add(enemy.position, {x: Math.random() * 100 - 50, y: Math.random() * 100 - 50});
+      }
+
+      const destinationDistance = subtract(enemy.destination, enemy.position);
+      const distance = pythag(destinationDistance);
+
+      if (distance < ATTACK_RANGE - 10 && enemy.attackTimeoutProgress > enemy.attackTimeoutLength) {
+        enemy.mode = 'ATTACKING';
+        return enemy;
+      }
+
+      enemy.mode = 'MOVING';
+      const speed = 5;
+
+      if (pythag(destinationDistance) > ATTACK_RANGE - 10) {
+        enemy.position = add(enemy.position, multiply(normalize(destinationDistance), delta * speed));
+      } else {
+        enemy.mode = 'WAITING';
+      }
+
+      return enemy;
+    });
+
     return state;
   }
 
@@ -82,7 +177,9 @@ function applyAction (state: GameState, action: Action): GameState {
           destination: null,
           chat: [],
           chatting: false,
-          newMessage: ''
+          newMessage: '',
+          maxHealth: 100,
+          health: 100
         }
       }
     }
@@ -194,7 +291,24 @@ function applyAction (state: GameState, action: Action): GameState {
 
 function Game (sources: GameSources) {
   const initialState : GameState = {
-    players: {}
+    players: {},
+    enemies: [
+      {
+        id: uuid.v4(),
+        name: 'Goblin',
+        position: {x: 300, y: 300},
+        destination: null,
+        target: null,
+        health: 100,
+        maxHealth: 100,
+        mode: 'WAITING',
+        attackLength: 400 / 16,
+        attackProgress: 0,
+        attackTimeoutLength: 1200 / 16,
+        attackTimeoutProgress: 0,
+        damage: 10
+      }
+    ]
   };
 
   const update$ = sources.Animation.map(({delta}) => {
@@ -214,6 +328,7 @@ function Game (sources: GameSources) {
 export {
   Game,
   PlayerState,
+  EnemyState,
   GameState,
   Action
 }

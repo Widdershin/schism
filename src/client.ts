@@ -4,7 +4,7 @@ import {run} from '@cycle/xstream-run';
 
 import xs, {Stream} from 'xstream';
 
-import {Game, Action, GameState, PlayerState} from './game';
+import {Game, Action, GameState, PlayerState, EnemyState} from './game';
 import {add, subtract} from './vector';
 
 function mousePosition (event) {
@@ -25,7 +25,7 @@ function messageOpacity (timeAgo: number): number {
   return 1 - (timeAgo - MESSAGE_FADEOUT_TIME) / (MESSAGE_DISPLAY_TIME - MESSAGE_FADEOUT_TIME);
 }
 
-function isMovingLeft (player: PlayerState): boolean {
+function isMovingLeft (player: PlayerState | EnemyState): boolean {
   return player.destination && subtract(player.destination, player.position).x < 0
 }
 
@@ -87,7 +87,7 @@ function renderPlayer (player: PlayerState, time: number) {
       h('text', {
         attrs: {
           x: player.position.x,
-          y: player.position.y + size,
+          y: player.position.y + size - 8,
           'text-anchor': 'middle',
         }
       }, player.name.slice(0, 5)),
@@ -122,11 +122,113 @@ function renderPlayer (player: PlayerState, time: number) {
 
           fill: 'white'
         }
-      })
+      }),
+
+      ...renderHealthBar(player)
     ])
   )
 }
 
+function renderHealthBar (player: PlayerState | EnemyState) {
+  const width = 50;
+  const height = 6;
+  const healthRatio = player.health / player.maxHealth;
+  const yOffset = 65;
+
+  return [
+    h('rect', {
+      attrs: {
+        fill: 'red',
+        stroke: 'black',
+        x: player.position.x - width / 2,
+        y: player.position.y + yOffset - height / 2,
+        width,
+        height
+      }
+    }),
+
+    h('rect', {
+      attrs: {
+        fill: 'lime',
+        x: player.position.x - width / 2,
+        y: player.position.y + yOffset - height / 2,
+        width: width * healthRatio,
+        height: height
+      }
+    })
+  ]
+}
+
+function jumpHeight (attackProgress: number, attackLength: number): number {
+  if (attackProgress === 0) {
+    return 0;
+  }
+
+  const ratio = (attackProgress / attackLength - 0.5) * 2;
+  const jumpHeight = 30;
+
+  return jumpHeight - jumpHeight * Math.abs(ratio * ratio);
+}
+
+function renderEnemy (enemy: EnemyState, time: number) {
+  const size = 64;
+
+  let transform = `scale(1, 1)`;
+
+  if (isMovingLeft(enemy)) {
+    transform = `translate(${enemy.position.x * 2}, 0), scale(-1, 1)`;
+  }
+
+  if (enemy.mode === 'MOVING') {
+    transform += ` rotate(${Math.sin(time / 50) * 10 % 360} ${enemy.position.x} ${enemy.position.y})`;
+  }
+
+  const jumpY = jumpHeight(enemy.attackProgress, enemy.attackLength);
+  const jumpHeightTotal = 30;
+  const jumpRatio = jumpY / jumpHeightTotal;
+  const additionalShadowFade = 0.4;
+
+  return (
+    h('g', {attrs: {x: enemy.position.x, y: enemy.position.y}}, [
+      h('ellipse', {
+        class: {
+          shadow: true
+        },
+
+        attrs: {
+          cx: enemy.position.x,
+          cy: enemy.position.y + size / 2 - 3,
+
+          rx: size / (3 + 2 * jumpRatio),
+          ry: size / (5 + 3 * jumpRatio),
+          fill: 'url(#fadeOut)',
+          opacity: 0.7 - additionalShadowFade * jumpRatio
+        }
+      }),
+
+      h('image', {
+        attrs: {
+          href: '/goblin.png',
+          x: enemy.position.x - size / 2,
+          y: enemy.position.y - jumpY - size / 2,
+          width: size,
+          height: size,
+          transform
+        }
+      }),
+
+      h('text', {
+        attrs: {
+          x: enemy.position.x,
+          y: enemy.position.y + size - 8,
+          'text-anchor': 'middle',
+        }
+      }, enemy.name),
+
+      ...renderHealthBar(enemy)
+    ])
+  )
+}
 const defs = (
   h('defs', [
     h('filter', {
@@ -169,6 +271,11 @@ const defs = (
 
 function view (state: GameState) {
   const time = new Date().getTime();
+  const groups = [
+    ...Object.values(state.players).map(player => renderPlayer(player, time)),
+    ...state.enemies.map(enemy => renderEnemy(enemy, time))
+  ];
+
   return (
     h('svg', {
       attrs: {
@@ -179,7 +286,8 @@ function view (state: GameState) {
       }
     }, [
       defs,
-      ...Object.values(state.players).map(player => renderPlayer(player, time))
+
+      ...groups.sort((a, b) => a.data.attrs.y - b.data.attrs.y)
     ])
   );
 }
