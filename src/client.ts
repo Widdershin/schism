@@ -5,7 +5,7 @@ import {run} from '@cycle/xstream-run';
 import xs, {Stream} from 'xstream';
 
 import {Game, Action, GameState, PlayerState} from './game';
-import {add} from './vector';
+import {add, subtract} from './vector';
 
 function mousePosition (event) {
   return {
@@ -25,12 +25,25 @@ function messageOpacity (timeAgo: number): number {
   return 1 - (timeAgo - MESSAGE_FADEOUT_TIME) / (MESSAGE_DISPLAY_TIME - MESSAGE_FADEOUT_TIME);
 }
 
+function isMovingLeft (player: PlayerState): boolean {
+  return player.destination && subtract(player.destination, player.position).x < 0
+}
+
 function renderPlayer (player: PlayerState, time: number) {
   const size = 64;
   let speechToDisplay = player.chat.slice(0, 5);
 
   speechToDisplay = speechToDisplay.filter(message => time - message.time < MESSAGE_DISPLAY_TIME);
 
+  let transform = `scale(1, 1)`;
+
+  if (isMovingLeft(player)) {
+    transform = `translate(${player.position.x * 2}, 0), scale(-1, 1)`;
+  }
+
+  if (player.destination) {
+    transform += ` rotate(${Math.sin(time / 50) * 10 % 360} ${player.position.x} ${player.position.y})`;
+  }
 
   if (player.newMessage !== '') {
     const newMessage = {
@@ -43,14 +56,15 @@ function renderPlayer (player: PlayerState, time: number) {
   }
 
   return (
-    h('g', [
+    h('g', {attrs: {x: player.position.x, y: player.position.y}}, [
       h('image', {
         attrs: {
           href: '/character.png',
           x: player.position.x - size / 2,
           y: player.position.y - size / 2,
           width: size,
-          height: size
+          height: size,
+          transform
         }
       }),
 
