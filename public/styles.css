@@ -13,3 +13,7 @@ svg {
 image {
   image-rendering: pixelated;
 }
+
+.invisible {
+  visibility: hidden;
+}

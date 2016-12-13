@@ -25,7 +25,7 @@ const webSocketServer = new ws.Server({server, path: '/websocket'});
 
 function makeWebSocketDriver (socketServer) {
   return function socketDriver (sink$, streamAdapter) {
-    let connections = [];
+    let connections = {};
     const {observer, stream} = streamAdapter.makeSubject();
     const newConnection$ = xs.create();
     const disconnection$ = xs.create();
@@ -70,6 +70,7 @@ function makeWebSocketDriver (socketServer) {
       });
 
       ws.on('close', () => {
+        console.log('closed', id);
         delete connections[id];
         disconnection$.shamefullySendNext(id);
       });

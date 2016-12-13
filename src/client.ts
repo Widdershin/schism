@@ -5,6 +5,7 @@ import {run} from '@cycle/xstream-run';
 import xs, {Stream} from 'xstream';
 
 import {Game, Action, GameState, PlayerState} from './game';
+import {add} from './vector';
 
 function mousePosition (event) {
   return {
@@ -31,20 +32,58 @@ function renderPlayer (player: PlayerState) {
         attrs: {
           x: player.position.x,
           y: player.position.y + size,
-          'text-anchor': 'middle'
+          'text-anchor': 'middle',
         }
       }, player.name.slice(0, 5)),
 
       h('text', {
+        class: {
+          speech: true
+        },
+
         attrs: {
+          'font-size': 'larger',
+          filter: 'url(#solid)',
           x: player.position.x,
-          y: player.position.y - size,
+          y: player.position.y - size * 0.75,
           'text-anchor': 'middle'
         }
-      }, player.newMessage)
+      }, player.newMessage),
+
+      h('polygon', {
+        class: {
+          invisible: player.newMessage === ''
+        },
+        attrs: {
+          points: [
+            add(player.position, {x: -5, y: -45}),
+            add(player.position, {x: 5, y: -45}),
+            add(player.position, {x: 0, y: -35})
+          ].map(({x, y}) => `${x},${y}`).join(' '),
+
+          fill: 'white'
+        }
+      })
     ])
   )
 }
+
+const defs = (
+  h('defs', [
+    h('filter', {
+      attrs: {
+        id: 'solid',
+        x: -0.05,
+        y: -0.05,
+        width: 1.1,
+        height: 1.1
+      }
+    }, [
+      h('feFlood', {attrs: {'flood-color': 'beige'}}),
+      h('feComposite', {attrs: {in: 'SourceGraphic'}})
+    ])
+  ])
+)
 
 function view (state: GameState) {
   return (
@@ -56,6 +95,7 @@ function view (state: GameState) {
         'xmlns:xlink': 'http://www.w3.org/1999/xlink'
       }
     }, [
+      defs,
       ...Object.values(state.players).map(renderPlayer)
     ])
   );
