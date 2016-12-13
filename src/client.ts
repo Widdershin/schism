@@ -57,6 +57,22 @@ function renderPlayer (player: PlayerState, time: number) {
 
   return (
     h('g', {attrs: {x: player.position.x, y: player.position.y}}, [
+      h('ellipse', {
+        class: {
+          shadow: true
+        },
+
+        attrs: {
+          cx: player.position.x,
+          cy: player.position.y + size / 2 - 3,
+
+          rx: size / 3,
+          ry: size / 5,
+          fill: 'url(#fadeOut)',
+          opacity: 0.7
+        }
+      }),
+
       h('image', {
         attrs: {
           href: '/character.png',
@@ -124,6 +140,29 @@ const defs = (
     }, [
       h('feFlood', {attrs: {'flood-color': 'beige'}}),
       h('feComposite', {attrs: {in: 'SourceGraphic'}})
+    ]),
+
+    h('radialGradient', {
+      attrs: {
+        id: 'fadeOut',
+        fx: 0.5,
+        fy: 0.5,
+        r: 1
+      }
+    }, [
+      h('stop',  {
+        attrs: {
+          'stop-opacity': 1,
+          offset: 0
+        }
+      }),
+
+      h('stop',  {
+        attrs: {
+          'stop-opacity': 0,
+          offset: 0.6
+        }
+      }),
     ])
   ])
 )
