@@ -41,7 +41,7 @@ function renderPlayer (player: PlayerState, time: number) {
     transform = `translate(${player.position.x * 2}, 0), scale(-1, 1)`;
   }
 
-  if (player.destination) {
+  if (player.mode === 'MOVING') {
     transform += ` rotate(${Math.sin(time / 50) * 10 % 360} ${player.position.x} ${player.position.y})`;
   }
 
@@ -54,6 +54,11 @@ function renderPlayer (player: PlayerState, time: number) {
 
     speechToDisplay = [newMessage].concat(speechToDisplay);
   }
+
+  const jumpY = jumpHeight(player.attackProgress, player.attackLength);
+  const jumpHeightTotal = 30;
+  const jumpRatio = jumpY / jumpHeightTotal;
+  const additionalShadowFade = 0.4;
 
   return (
     h('g', {attrs: {x: player.position.x, y: player.position.y}}, [
@@ -69,7 +74,7 @@ function renderPlayer (player: PlayerState, time: number) {
           rx: size / 3,
           ry: size / 5,
           fill: 'url(#fadeOut)',
-          opacity: 0.7
+          opacity: 0.7 - additionalShadowFade * jumpRatio
         }
       }),
 
@@ -77,7 +82,7 @@ function renderPlayer (player: PlayerState, time: number) {
         attrs: {
           href: '/character.png',
           x: player.position.x - size / 2,
-          y: player.position.y - size / 2,
+          y: player.position.y - jumpY - size / 2,
           width: size,
           height: size,
           transform
@@ -90,7 +95,7 @@ function renderPlayer (player: PlayerState, time: number) {
           y: player.position.y + size - 8,
           'text-anchor': 'middle',
         }
-      }, player.name.slice(0, 5)),
+      }, player.name.slice(0, 6)),
 
       ...speechToDisplay.map((message, index) =>
         h('text', {
@@ -207,7 +212,12 @@ function renderEnemy (enemy: EnemyState, time: number) {
       }),
 
       h('image', {
+        class: {
+          enemy: true
+        },
+
         attrs: {
+          id: enemy.id,
           href: '/goblin.png',
           x: enemy.position.x - size / 2,
           y: enemy.position.y - jumpY - size / 2,
@@ -311,34 +321,37 @@ function Client (sources) {
     .map(mousePosition)
     .map(destination => ({type: 'MOVE', data: destination}));
 
+  const attack$ = sources.DOM
+    .select('.enemy')
+    .events('click')
+    .debug(event => event.stopPropagation())
+    .map(event => ({type: 'ATTACK', data: event.target.id}));
+
   const chat$ = sources.DOM
     .select('document')
     .events('keydown')
     .map(event => ({type: 'CHAT', data: event.key}));
 
-  const gameAction$ = xs.merge(
+  const action$ = xs.merge(
     move$,
-    stateOverride$,
-    chat$
+    chat$,
+    attack$
   );
 
   const gameActionWithId$ = id$
-    .map(id => gameAction$.map(action => ({...action, id})))
+    .map(id => action$.map(action => ({...action, id})))
     .flatten();
+
+  const gameAction$ = xs.merge(gameActionWithId$, stateOverride$);
 
   const state$ = Game({
     Animation: sources.Animation,
-    action$: gameActionWithId$ as Stream<Action>
+    action$: gameAction$ as Stream<Action>
   });
-
-  const socket$ = xs.merge(
-    move$,
-    chat$
-  );
 
   return {
     DOM: state$.map(view),
-    Socket: socket$
+    Socket: action$
   }
 }
 

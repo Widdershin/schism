@@ -9,7 +9,7 @@ interface GameSources {
 }
 
 interface Action {
-  type: 'CONNECT' | 'DISCONNECT' | 'MOVE' | 'UPDATE' | 'OVERRIDE' | 'CHAT',
+  type: 'CONNECT' | 'DISCONNECT' | 'MOVE' | 'UPDATE' | 'OVERRIDE' | 'CHAT' | 'ATTACK',
   id?: string,
 
   data?: any
@@ -20,17 +20,33 @@ interface GameState {
   enemies: Array<EnemyState>
 }
 
+interface EnemyTarget {
+  type: 'ENEMY',
+  id: string
+}
+
 interface PlayerState {
   id: string,
   name: string,
   position: Vector,
+
+  target: null | EnemyTarget
+
+  mode: 'MOVING' | 'ATTACKING' | 'WAITING',
   destination: null | Vector,
   chat: Array<ChatMessage>,
   chatting: Boolean,
   newMessage: string,
 
   health: number,
-  maxHealth: number
+  maxHealth: number,
+
+  attackLength: number,
+  attackProgress: number,
+  attackTimeoutLength: number,
+  attackTimeoutProgress: number,
+
+  damage: number
 }
 
 interface EnemyState {
@@ -46,7 +62,8 @@ interface EnemyState {
   attackProgress: number,
   attackTimeoutLength: number,
   attackTimeoutProgress: number,
-  damage: number
+  damage: number,
+  freezeAllMotorFunctions: boolean
 }
 
 interface ChatMessage {
@@ -64,28 +81,92 @@ function applyAction (state: GameState, action: Action): GameState {
     const delta = action.data;
 
     Object.keys(state.players).forEach(playerId => {
+      const ATTACK_RANGE = 80;
       const player = state.players[playerId];
 
+      if (player.attackTimeoutProgress < player.attackTimeoutLength) {
+        player.attackTimeoutProgress += delta;
+      }
+
+      let target;
+      if (player.target) {
+        target = state.enemies.find(enemy => enemy.id === player.target.id);
+
+        if (target) {
+          player.destination = target.position;
+        } else {
+          player.mode = 'WAITING';
+          player.target = null;
+          player.destination = null;
+        }
+      }
+
       if (!player.destination) {
+        player.mode = 'WAITING';
         return state;
       }
 
       const destinationDistance = subtract(player.destination, player.position);
+      const distance = pythag(destinationDistance);
 
       const speed = 5;
 
-      if (pythag(destinationDistance) > speed) {
+      if (target && player.mode === 'ATTACKING') {
+        player.attackProgress += delta;
+
+        if (player.attackProgress > player.attackLength) {
+          const distanceToTarget = pythag(subtract(target.position, player.position));
+
+          if (distanceToTarget <= ATTACK_RANGE) {
+            target.health -= player.damage;
+          }
+
+          player.mode = 'WAITING';
+          player.attackTimeoutProgress = 0;
+          player.attackProgress = 0;
+        }
+
+        return player;
+      }
+
+      if (player.target && distance < ATTACK_RANGE - 10 && player.attackTimeoutProgress > player.attackTimeoutLength) {
+        player.mode = 'ATTACKING';
+        return;
+      }
+
+      if (player.target && distance < ATTACK_RANGE - 10) {
+        player.mode = 'WAITING';
+        return;
+      }
+
+      if (distance > speed) {
         player.position = add(player.position, multiply(normalize(destinationDistance), delta * speed));
       } else {
+        player.mode = 'WAITING';
         player.position = player.destination;
         player.destination = null;
       }
     });
 
     const TARGET_DISTANCE = 400;
-    const ATTACK_RANGE = 80;
 
     state.enemies = state.enemies.map(enemy => {
+      const ATTACK_RANGE = 80;
+      if (enemy.freezeAllMotorFunctions) {
+        return enemy;
+      }
+
+      const nearbyEnemies = state.enemies.filter(other => {
+        return other !== enemy && pythag(subtract(other.position, enemy.position)) < 40;
+      });
+
+      nearbyEnemies.forEach(other => {
+        const difference = normalize(subtract(other.position, enemy.position));
+
+
+        other.position = add(other.position, difference);
+      });
+
       if (enemy.attackTimeoutProgress < enemy.attackTimeoutLength) {
         enemy.attackTimeoutProgress += delta;
       }
@@ -123,6 +204,11 @@ function applyAction (state: GameState, action: Action): GameState {
 
           if (distanceToTarget <= ATTACK_RANGE) {
             targetPlayer.health -= enemy.damage;
+
+            if (targetPlayer.mode === 'WAITING') {
+              targetPlayer.target = {type: 'ENEMY', id: enemy.id};
+              targetPlayer.mode = 'MOVING';
+            }
           }
 
           enemy.mode = 'WAITING';
@@ -140,7 +226,7 @@ function applyAction (state: GameState, action: Action): GameState {
       const destinationDistance = subtract(enemy.destination, enemy.position);
       const distance = pythag(destinationDistance);
 
-      if (distance < ATTACK_RANGE - 10 && enemy.attackTimeoutProgress > enemy.attackTimeoutLength) {
+      if (enemy.target && distance < ATTACK_RANGE - 10 && enemy.attackTimeoutProgress > enemy.attackTimeoutLength) {
         enemy.mode = 'ATTACKING';
         return enemy;
       }
@@ -148,7 +234,7 @@ function applyAction (state: GameState, action: Action): GameState {
       enemy.mode = 'MOVING';
       const speed = 5;
 
-      if (pythag(destinationDistance) > ATTACK_RANGE - 10) {
+      if (distance > ATTACK_RANGE - 10) {
         enemy.position = add(enemy.position, multiply(normalize(destinationDistance), delta * speed));
       } else {
         enemy.mode = 'WAITING';
@@ -156,6 +242,8 @@ function applyAction (state: GameState, action: Action): GameState {
 
       return enemy;
     });
+
+    state.enemies = state.enemies.filter(enemy => enemy.health > 0);
 
     return state;
   }
@@ -174,12 +262,19 @@ function applyAction (state: GameState, action: Action): GameState {
             x: 100 + 600 * Math.random(),
             y: 100
           },
+          mode: 'WAITING',
+          target: null,
           destination: null,
           chat: [],
           chatting: false,
           newMessage: '',
           maxHealth: 100,
-          health: 100
+          health: 100,
+          attackLength: 400 / 16,
+          attackProgress: 0,
+          attackTimeoutLength: 1200 / 16,
+          attackTimeoutProgress: 0,
+          damage: 20
         }
       }
     }
@@ -200,7 +295,25 @@ function applyAction (state: GameState, action: Action): GameState {
 
         [action.id]: {
           ...state.players[action.id],
-          destination: action.data
+          destination: action.data,
+          mode: 'MOVING',
+          target: null
+        }
+      }
+    }
+  }
+
+  if (action.type === 'ATTACK') {
+    return {
+      ...state,
+
+      players: {
+        ...state.players,
+
+        [action.id]: {
+          ...state.players[action.id],
+          target: {type: 'ENEMY', id: action.data as string},
+          mode: 'MOVING'
         }
       }
     }
@@ -289,25 +402,32 @@ function applyAction (state: GameState, action: Action): GameState {
   return state;
 }
 
+function Goblin(position: Vector): EnemyState {
+  return {
+    id: uuid.v4(),
+    name: 'Goblin',
+    position,
+    destination: null,
+    target: null,
+    health: 100,
+    maxHealth: 100,
+    mode: 'WAITING',
+    attackLength: 400 / 16,
+    attackProgress: 0,
+    attackTimeoutLength: 1200 / 16,
+    attackTimeoutProgress: 0,
+    damage: 10,
+    freezeAllMotorFunctions: false
+  };
+}
+
 function Game (sources: GameSources) {
   const initialState : GameState = {
     players: {},
     enemies: [
-      {
-        id: uuid.v4(),
-        name: 'Goblin',
-        position: {x: 300, y: 300},
-        destination: null,
-        target: null,
-        health: 100,
-        maxHealth: 100,
-        mode: 'WAITING',
-        attackLength: 400 / 16,
-        attackProgress: 0,
-        attackTimeoutLength: 1200 / 16,
-        attackTimeoutProgress: 0,
-        damage: 10
-      }
+      Goblin({x: 300, y: 300}),
+      Goblin({x: 300, y: 400}),
+      Goblin({x: 400, y: 300}),
     ]
   };
 
