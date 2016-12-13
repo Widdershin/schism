@@ -1,3 +1,4 @@
+import * as uuid from 'uuid';
 import xs, {Stream} from 'xstream';
 
 import {Vector, add, subtract, multiply, normalize, pythag} from './vector';
@@ -23,14 +24,15 @@ interface PlayerState {
   name: string,
   position: Vector,
   destination: null | Vector,
-  chat: Array<string>,
+  chat: Array<ChatMessage>,
   chatting: Boolean,
   newMessage: string
 }
 
 interface ChatMessage {
   text: string,
-  time: Date
+  time: number,
+  id: string
 }
 
 function applyAction (state: GameState, action: Action): GameState {
@@ -127,6 +129,12 @@ function applyAction (state: GameState, action: Action): GameState {
     }
 
     if (player.chatting && action.data === 'Enter') {
+      const newMessage = {
+        text: player.newMessage,
+        id: uuid.v4(),
+        time: new Date().getTime()
+      };
+
       return {
         ...state,
 
@@ -136,7 +144,7 @@ function applyAction (state: GameState, action: Action): GameState {
           [player.id]: {
             ...player,
 
-            chat: player.chat.concat(player.newMessage),
+            chat: [newMessage].concat(player.chat),
             chatting: false,
             newMessage: ''
           }

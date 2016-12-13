@@ -14,8 +14,34 @@ function mousePosition (event) {
   }
 }
 
-function renderPlayer (player: PlayerState) {
+const MESSAGE_DISPLAY_TIME = 10000;
+const MESSAGE_FADEOUT_TIME = 8500;
+
+function messageOpacity (timeAgo: number): number {
+  if (timeAgo < MESSAGE_FADEOUT_TIME) {
+    return 1;
+  }
+
+  return 1 - (timeAgo - MESSAGE_FADEOUT_TIME) / (MESSAGE_DISPLAY_TIME - MESSAGE_FADEOUT_TIME);
+}
+
+function renderPlayer (player: PlayerState, time: number) {
   const size = 64;
+  let speechToDisplay = player.chat.slice(0, 5);
+
+  speechToDisplay = speechToDisplay.filter(message => time - message.time < MESSAGE_DISPLAY_TIME);
+
+
+  if (player.newMessage !== '') {
+    const newMessage = {
+      id: 'newMessage',
+      time,
+      text: player.newMessage
+    }
+
+    speechToDisplay = [newMessage].concat(speechToDisplay);
+  }
+
   return (
     h('g', [
       h('image', {
@@ -36,19 +62,22 @@ function renderPlayer (player: PlayerState) {
         }
       }, player.name.slice(0, 5)),
 
-      h('text', {
-        class: {
-          speech: true
-        },
+      ...speechToDisplay.map((message, index) =>
+        h('text', {
+          class: {
+            speech: true
+          },
 
-        attrs: {
-          'font-size': 'larger',
-          filter: 'url(#solid)',
-          x: player.position.x,
-          y: player.position.y - size * 0.75,
-          'text-anchor': 'middle'
-        }
-      }, player.newMessage),
+          attrs: {
+            'font-size': 'larger',
+            filter: 'url(#solid)',
+            x: player.position.x,
+            y: player.position.y - size * 0.75 - index * 30,
+            opacity: messageOpacity(time - message.time),
+            'text-anchor': 'middle'
+          }
+        }, message.text)
+      ),
 
       h('polygon', {
         class: {
@@ -86,6 +115,7 @@ const defs = (
 )
 
 function view (state: GameState) {
+  const time = new Date().getTime();
   return (
     h('svg', {
       attrs: {
@@ -96,7 +126,7 @@ function view (state: GameState) {
       }
     }, [
       defs,
-      ...Object.values(state.players).map(renderPlayer)
+      ...Object.values(state.players).map(player => renderPlayer(player, time))
     ])
   );
 }
