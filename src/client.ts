@@ -385,7 +385,7 @@ function makeWebSocketDriver (ws) {
 const drivers = {
   DOM: makeDOMDriver('.app'),
   Animation: makeAnimationDriver(),
-  Socket: makeWebSocketDriver(new WebSocket(`ws://127.0.0.1:8000/websocket`))
+  Socket: makeWebSocketDriver(new WebSocket(`ws://${location.host}/websocket`))
 };
 
 run(Client, drivers);
