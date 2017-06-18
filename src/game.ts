@@ -206,8 +206,10 @@ function applyAction (state: GameState, action: Action): GameState {
             targetPlayer.health -= enemy.damage;
 
             if (targetPlayer.mode === 'WAITING') {
-              targetPlayer.target = {type: 'ENEMY', id: enemy.id};
-              targetPlayer.mode = 'MOVING';
+              if (!targetPlayer.target) {
+                targetPlayer.target = {type: 'ENEMY', id: enemy.id};
+                targetPlayer.mode = 'MOVING';
+              }
             }
           }
 
@@ -297,7 +299,8 @@ function applyAction (state: GameState, action: Action): GameState {
           ...state.players[action.id],
           destination: action.data,
           mode: 'MOVING',
-          target: null
+          target: null,
+          attackProgress: 0
         }
       }
     }
@@ -449,6 +452,7 @@ export {
   Game,
   PlayerState,
   EnemyState,
+  EnemyTarget,
   GameState,
   Action
 }

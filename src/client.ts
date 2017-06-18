@@ -4,7 +4,7 @@ import {run} from '@cycle/xstream-run';
 
 import xs, {Stream} from 'xstream';
 
-import {Game, Action, GameState, PlayerState, EnemyState} from './game';
+import {Game, Action, GameState, PlayerState, EnemyState, EnemyTarget} from './game';
 import {add, subtract} from './vector';
 
 function mousePosition (event) {
@@ -175,7 +175,7 @@ function jumpHeight (attackProgress: number, attackLength: number): number {
   return jumpHeight - jumpHeight * Math.abs(ratio * ratio);
 }
 
-function renderEnemy (enemy: EnemyState, time: number) {
+function renderEnemy (enemy: EnemyState, time: number, playerTarget: EnemyTarget | null) {
   const size = 64;
 
   let transform = `scale(1, 1)`;
@@ -192,6 +192,8 @@ function renderEnemy (enemy: EnemyState, time: number) {
   const jumpHeightTotal = 30;
   const jumpRatio = jumpY / jumpHeightTotal;
   const additionalShadowFade = 0.4;
+
+  const beingTargeted = playerTarget && playerTarget.id === enemy.id;
 
   return (
     h('g', {attrs: {x: enemy.position.x, y: enemy.position.y}}, [
@@ -210,6 +212,20 @@ function renderEnemy (enemy: EnemyState, time: number) {
           opacity: 0.7 - additionalShadowFade * jumpRatio
         }
       }),
+
+      beingTargeted ? h('ellipse', {
+        attrs: {
+          cx: enemy.position.x,
+          cy: enemy.position.y + size / 2 - 3,
+
+          rx: size / 3,
+          ry: size / 5,
+          fill: 'none',
+          stroke: 'red',
+          'stroke-width': 2,
+          opacity: 0.7
+        }
+      }) : '',
 
       h('image', {
         class: {
@@ -279,11 +295,13 @@ const defs = (
   ])
 )
 
-function view (state: GameState) {
+function view ([id, state]) {
   const time = new Date().getTime();
+  const player = state.players[id];
+
   const groups = [
     ...Object.values(state.players).map(player => renderPlayer(player, time)),
-    ...state.enemies.map(enemy => renderEnemy(enemy, time))
+    ...state.enemies.map(enemy => renderEnemy(enemy, time, player.target))
   ];
 
   return (
@@ -350,7 +368,7 @@ function Client (sources) {
   });
 
   return {
-    DOM: state$.map(view),
+    DOM: xs.combine(id$, state$).map(view),
     Socket: action$
   }
 }
