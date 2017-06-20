@@ -295,6 +295,53 @@ const defs = (
   ])
 )
 
+function renderInventory (inventory) {
+  const windowWidth = window.innerWidth;
+  const windowHeight = window.innerHeight;
+  const width = (64 + 8) * 8 + 8;
+  const height = 80;
+
+  const slots = [0, 1, 2, 3, 4, 5, 6, 7];
+
+  return (
+    h('g', [
+      h('rect', {
+        attrs: {
+          x: windowWidth / 2 - width / 2,
+          y: windowHeight - height,
+          width,
+          height,
+          fill: '#343'
+        }
+      }),
+
+      ...slots.map(i => (
+        h('rect', {
+          attrs: {
+            x: 8 + windowWidth / 2 - width / 2 + i * 72,
+            y: 8 + windowHeight - height,
+            width: 64,
+            height: 64,
+            fill: '#565'
+          }
+        })
+      )),
+
+      ...inventory.map((item, index) => (
+        h('image', {
+          attrs: {
+            href: '/scroll.png',
+            x: 8 + windowWidth / 2 - width / 2 + index * 64,
+            y: 8 + windowHeight - height,
+            width: 64,
+            height: 64
+          }
+        })
+      ))
+    ])
+  )
+}
+
 function view ([id, state]) {
   const time = new Date().getTime();
   const player = state.players[id];
@@ -315,7 +362,9 @@ function view ([id, state]) {
     }, [
       defs,
 
-      ...groups.sort((a, b) => a.data.attrs.y - b.data.attrs.y)
+      ...groups.sort((a, b) => a.data.attrs.y - b.data.attrs.y),
+
+      renderInventory(player.inventory)
     ])
   );
 }

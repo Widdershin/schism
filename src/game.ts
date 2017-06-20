@@ -47,7 +47,15 @@ interface PlayerState {
   attackTimeoutProgress: number,
 
   damage: number,
-  speed: number
+  speed: number,
+
+  inventory: Array<InventoryItem>
+}
+
+interface InventoryItem {
+  id: string,
+  type: string,
+  name: string
 }
 
 interface EnemyState {
@@ -276,7 +284,14 @@ function applyAction (state: GameState, action: Action): GameState {
           attackTimeoutLength: 1200 / 16,
           attackTimeoutProgress: 0,
           damage: 20,
-          speed: 5
+          speed: 5,
+          inventory: [
+            {
+              id: 'foo',
+              type: 'scroll',
+              name: 'Scroll of Heal Wounds'
+            }
+          ]
         }
       }
     }
@@ -419,7 +434,7 @@ function Goblin(position: Vector): EnemyState {
     attackProgress: 0,
     attackTimeoutLength: 1200 / 16,
     attackTimeoutProgress: 0,
-    damage: 10,
+    damage: 5,
     freezeAllMotorFunctions: false,
     speed: 4
   };
