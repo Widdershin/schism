@@ -34,7 +34,7 @@ function makeWebSocketDriver (socketServer) {
       next (event) {
         if (event.type === 'BROADCAST') {
           Object.values(connections).forEach(connection => {
-            connection.send(JSON.stringify(event.data), (err) => {
+            (connection as any).send(JSON.stringify(event.data), (err) => {
               if (err) {
                 console.error(err);
               }

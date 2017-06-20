@@ -46,7 +46,8 @@ interface PlayerState {
   attackTimeoutLength: number,
   attackTimeoutProgress: number,
 
-  damage: number
+  damage: number,
+  speed: number
 }
 
 interface EnemyState {
@@ -63,7 +64,8 @@ interface EnemyState {
   attackTimeoutLength: number,
   attackTimeoutProgress: number,
   damage: number,
-  freezeAllMotorFunctions: boolean
+  freezeAllMotorFunctions: boolean,
+  speed: number
 }
 
 interface ChatMessage {
@@ -109,8 +111,6 @@ function applyAction (state: GameState, action: Action): GameState {
       const destinationDistance = subtract(player.destination, player.position);
       const distance = pythag(destinationDistance);
 
-      const speed = 5;
-
       if (target && player.mode === 'ATTACKING') {
         player.attackProgress += delta;
 
@@ -139,8 +139,8 @@ function applyAction (state: GameState, action: Action): GameState {
         return;
       }
 
-      if (distance > speed) {
-        player.position = add(player.position, multiply(normalize(destinationDistance), delta * speed));
+      if (distance > player.speed) {
+        player.position = add(player.position, multiply(normalize(destinationDistance), delta * player.speed));
       } else {
         player.mode = 'WAITING';
         player.position = player.destination;
@@ -206,8 +206,10 @@ function applyAction (state: GameState, action: Action): GameState {
             targetPlayer.health -= enemy.damage;
 
             if (targetPlayer.mode === 'WAITING') {
-              targetPlayer.target = {type: 'ENEMY', id: enemy.id};
-              targetPlayer.mode = 'MOVING';
+              if (!targetPlayer.target) {
+                targetPlayer.target = {type: 'ENEMY', id: enemy.id};
+                targetPlayer.mode = 'MOVING';
+              }
             }
           }
 
@@ -232,10 +234,9 @@ function applyAction (state: GameState, action: Action): GameState {
       }
 
       enemy.mode = 'MOVING';
-      const speed = 5;
 
       if (distance > ATTACK_RANGE - 10) {
-        enemy.position = add(enemy.position, multiply(normalize(destinationDistance), delta * speed));
+        enemy.position = add(enemy.position, multiply(normalize(destinationDistance), delta * enemy.speed));
       } else {
         enemy.mode = 'WAITING';
       }
@@ -274,7 +275,8 @@ function applyAction (state: GameState, action: Action): GameState {
           attackProgress: 0,
           attackTimeoutLength: 1200 / 16,
           attackTimeoutProgress: 0,
-          damage: 20
+          damage: 20,
+          speed: 5
         }
       }
     }
@@ -297,7 +299,8 @@ function applyAction (state: GameState, action: Action): GameState {
           ...state.players[action.id],
           destination: action.data,
           mode: 'MOVING',
-          target: null
+          target: null,
+          attackProgress: 0
         }
       }
     }
@@ -417,7 +420,8 @@ function Goblin(position: Vector): EnemyState {
     attackTimeoutLength: 1200 / 16,
     attackTimeoutProgress: 0,
     damage: 10,
-    freezeAllMotorFunctions: false
+    freezeAllMotorFunctions: false,
+    speed: 4
   };
 }
 
@@ -449,6 +453,7 @@ export {
   Game,
   PlayerState,
   EnemyState,
+  EnemyTarget,
   GameState,
   Action
 }
